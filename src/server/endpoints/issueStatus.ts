@@ -5,17 +5,15 @@ import { getSessionManager } from '../../utils/sessionManager';
 import qrcode from 'qrcode';
 import { debug } from 'console';
 
-interface CredentialRequestResponse {
+interface StatusResponse {
     sessionId:string;
-    qr?:string;
-    deeplink?:string;
-    status?:string;
-    reason?:string;
+    status:string;
+    reason:string;
 }
 
-export function credentialIssuanceRequest(router:Router) {
-    router.get('/credentialIssuanceRequest',
-        async (request:Request, response:Response<CredentialRequestResponse>) => {
+export function issueStatus(router:Router) {
+    router.get('/issueStatus',
+        async (request:Request, response:Response<StatusResponse>) => {
             try {
                 const obj = await doRequest(request.query);
                 response.send(obj)
@@ -31,33 +29,36 @@ export function credentialIssuanceRequest(router:Router) {
     );
 }
 
-async function doRequest(params:any): Promise<CredentialRequestResponse>
+async function doRequest(params:any): Promise<StatusResponse>
 {
-    const response:CredentialRequestResponse = {
-        sessionId: params.sessionId ?? 'unknown'
+    const response:StatusResponse = {
+        sessionId: params.sessionId ?? 'unknown',
+        status: 'fail',
+        reason: 'unknown'
     }
     debug("parameters passed", params);
     if (!params.sessionId || params.sessionId === '') {
-        throw new Error ("invalid session id");
+        throw new Error ("no issuance session found");
     }
 
-    const test = params.credentialType;
-    const configurationPath = getEnv('CONF_DIR', './conf') + '/' + test + '.json';
+    const sm = getSessionManager();
+    const session = await sm.get(params.sessionId);
+    const configurationPath = getEnv('CONF_DIR', './conf') + '/' + session.test + '.json';
     debug("trying reading test at ", configurationPath);
     const config = JSON.parse(fs.readFileSync(configurationPath , 'utf8').toString());
     debug("read", config);
 
     if (!config || typeof(config) !== 'object' || !config.name) {
-        throw new Error("test not configured");
+        throw new Error("no issuance session found");
     }
 
-    // fetch the offer
-    debug("fetching offer at ", config.url);
+    // fetch the status
+    debug("fetching status at ", config.status);
     const offerResponse = await fetch(
-        config.url,
+        config.status,
         {
             method:'POST',
-            body: JSON.stringify(config.data),
+            body: JSON.stringify({id: session.offerId }),
             headers: {
                 "Content-Type": "application/json",
                 "Authorization": "Bearer " + config.token
@@ -70,25 +71,15 @@ async function doRequest(params:any): Promise<CredentialRequestResponse>
         throw new Error("failed to retrieve offer");
     });
 
-    if (!offerResponse.uri || !offerResponse.id) {
+    if (!offerResponse.status) {
         throw new Error("unsupported return values");
     }
+    response.status = 'pending';
+    response.reason = 'ok';
+    if (offerResponse.status == 'CREDENTIAL_ISSUED') {
+        response.status = 'success';
+    }
 
-    const sm = getSessionManager();
-    const session = await sm.get(params.sessionId);
-    session.test = test;
-    session.uri = offerResponse.uri;
-    session.offerId = offerResponse.id;
-    await sm.set(session);
-
-    response.deeplink = offerResponse.uri;
-
-    // create a qr-code image
-    await qrcode.toDataURL(offerResponse.uri, {type:'terminal'}).then((r) => response.qr = r).catch((e) => {
-        debug(e);
-        throw new Error("unable to generate QR code");
-    });
     debug("returning response", response);
-
     return response;
 }

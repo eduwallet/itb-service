@@ -6,6 +6,7 @@ import morgan from 'morgan';
 import cors, { CorsOptions } from 'cors'
 import { getEnv } from '../utils/getEnv';
 import { credentialIssuanceRequest } from './endpoints/credentialIssuanceRequest';
+import { issueStatus } from './endpoints/issueStatus';
 
 const PORT = Number.parseInt(getEnv('PORT', '5000'));
 const LISTEN_ADDRESS = getEnv('LISTEN_ADDRESS', '0.0.0.0');
@@ -18,6 +19,7 @@ export async function initialise()
     app.use('/', router);
 
     credentialIssuanceRequest(router);
+    issueStatus(router);
 
     debug("opening listening port");
     app.listen(PORT, LISTEN_ADDRESS, () => {});
