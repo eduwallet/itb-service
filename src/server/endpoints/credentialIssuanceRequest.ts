@@ -4,6 +4,7 @@ import { getEnv } from '../../utils/getEnv';
 import { getSessionManager } from '../../utils/sessionManager';
 import qrcode from 'qrcode';
 import { debug } from 'console';
+import moment from 'moment';
 
 interface CredentialRequestResponse {
     sessionId:string;
@@ -11,6 +12,7 @@ interface CredentialRequestResponse {
     deeplink?:string;
     status?:string;
     reason?:string;
+    pin?:string;
 }
 
 export function credentialIssuanceRequest(router:Router) {
@@ -53,6 +55,7 @@ async function doRequest(params:any): Promise<CredentialRequestResponse>
 
     // fetch the offer
     debug("fetching offer at ", config.url);
+
     const offerResponse = await fetch(
         config.url,
         {
@@ -71,6 +74,7 @@ async function doRequest(params:any): Promise<CredentialRequestResponse>
     });
 
     if (!offerResponse.uri || !offerResponse.id) {
+        debug("received unsupported response: ", offerResponse);
         throw new Error("unsupported return values");
     }
 
@@ -82,6 +86,9 @@ async function doRequest(params:any): Promise<CredentialRequestResponse>
     await sm.set(session);
 
     response.deeplink = offerResponse.uri;
+    if (config.txcode) {
+        response.pin = config.txcode;
+    }
 
     // create a qr-code image
     await qrcode.toDataURL(offerResponse.uri, {type:'terminal'}).then((r) => response.qr = r).catch((e) => {

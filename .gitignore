@@ -2,4 +2,8 @@ node_modules
 .env
 conf
 yarn-error.log
+deploy/run
+deploy/ansible_vault_id
+
+
 
